@@ -1,0 +1,920 @@
+\documentclass[conference]{IEEEtran}
+
+% =========================
+% PACKAGES
+% =========================
+
+\usepackage{cite}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{multirow}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{url}
+\usepackage{float}
+\usepackage[hidelinks]{hyperref}
+\usepackage{subcaption}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+% =========================
+% TIKZ PACKAGES
+% =========================
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{arrows.meta,positioning,fit,calc}
+
+% =========================
+% PROJECT NAME VARIABLE.
+% =========================
+\newcommand{\projectname}{FedGAT-TBML}
+
+% =========================
+% TITLE
+% =========================
+\title{
+\projectname: A Federated Graph Attention Framework for Real-Time
+Trade-Based Money Laundering Detection
+}
+% =========================
+% AUTHORS
+% =========================
+
+\author{
+\IEEEauthorblockN{
+Nagaraja G. S$^{1}$ \hspace{0.4cm}
+Sanjana Ravindra Otihal$^{1}$ \hspace{0.4cm}
+% Dr. Somesh Nandi$^{1}$ \hspace{0.4cm}
+Nikhil Vasu$^{2}$ \hspace{0.4cm}
+Rohith Biradar$^{2}$ \hspace{0.4cm}
+Suraj Chanaveeragoudra$^{2}$
+}
+
+\vspace{0.3cm}
+
+\IEEEauthorblockA{
+$^{1}$Department of CSE, R V College of Engineering, Bengaluru, India \\
+nagarajags@rvce.edu.in, sanjanaro@rvce.edu.in
+% , someshnandi@rvce.edu.in
+}
+
+\vspace{0.2cm}
+
+\IEEEauthorblockA{
+$^{2}$Department of CSE, R V College of Engineering, Bengaluru, India \\
+nikhilvasu.cs22@rvce.edu.in, rohithbiradar.cs22@rvce.edu.in, surajc.cs22@rvce.edu.in
+}
+}
+
+
+\begin{document}
+
+\maketitle
+\pagestyle{plain}
+
+\begin{abstract}
+Trade-Based Money Laundering (TBML) represents a highly sophisticated methodology for global capital flight, masking illicit financial flows within legitimate international commercial transactions. Conventional anti-money laundering frameworks rely on isolated, rule-based monitoring systems that fail to intercept multi-hop laundering typologies across distributed banking institutions. This paper presents \projectname, a privacy-preserving, federated hybrid graph learning framework for real-time multi-class TBML detection. Legitimate and suspicious corporate entities, transactions, and trade documents are modeled as a large-scale heterogeneous graph using Memgraph. The system utilizes a dual-stream neural architecture: a Graph Branch deploying a 3-layer Graph Attention Network (GATv2Conv) with global pooling to extract relational topology from KYC features, and a Temporal Branch utilizing Long Short-Term Memory (LSTM) networks to model evolving transaction sequences. To support real-time data ingestion and low-latency inference under sub-second Cypher query constraints, physical subgraph extraction is optimized and restricted to a 2-hop radius. Federated Learning via the FedAvg aggregation strategy enables multi-institutional collaborative training across isolated banking clients without centralizing raw personally identifiable information (PII). Experimental evaluations conducted across three distributed banking silos demonstrate that the framework achieves rapid convergence by round 10, delivering a global accuracy exceeding 96\%, an operational precision of $\ge 0.96$ for active fraud detection, and a minimum Precision-Recall Area Under the Curve (PR-AUC) of 0.92.
+The proposed framework provides a scalable and privacy-aware architecture for intelligent TBML detection, enabling real-time cross-bank fraud monitoring and human-in-the-loop analysis.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Federated Learning, Financial Fraud Detection, GATv2Conv, Graph Neural Networks, Real-Time Monitoring, Trade-Based Money Laundering
+\end{IEEEkeywords}
+
+
+% ==========================================================
+\section{Introduction}
+% ==========================================================
+Trade-Based Money Laundering (TBML) has emerged as one of the most sophisticated and economically damaging forms of financial crime within modern global trade ecosystems. By disguising illicit financial flows through seemingly legitimate commercial transactions, manipulated invoices, shell corporations, and cross-border trade activities, TBML enables large-scale movement of illegal capital while remaining deeply embedded within high-volume international commerce. The increasing digitization of financial systems, rapid growth of global trade networks, and expansion of interconnected banking infrastructures have significantly amplified the complexity of identifying suspicious transactional behavior across distributed financial environments. Unlike conventional financial fraud, TBML activities are often intentionally concealed within multi-hop transactional chains involving multiple intermediaries, jurisdictions, and layered financial relationships, making detection considerably challenging using traditional monitoring approaches~\cite{alsuwaidi2021}. Furthermore, the massive volume of transactional data generated across modern banking and trade systems introduces substantial analytical challenges for compliance investigators attempting to distinguish legitimate commercial activity from coordinated laundering operations.
+
+Despite significant advancements in Anti-Money Laundering (AML) technologies, most existing monitoring systems continue to rely heavily on deterministic rule-based engines, threshold-driven alert generation, and isolated tabular transaction analysis~\cite{oztas2024}. Such approaches are inherently limited in their ability to model hidden relational dependencies, indirect entity interactions, and coordinated laundering propagation patterns distributed across financial networks. Traditional machine learning methods similarly operate on flat feature representations that fail to capture graph topology, structural transactional relationships, and evolving multi-hop interaction behavior~\cite{jensen2023}. In addition, modern banking regulations and financial privacy frameworks such as GDPR impose strict restrictions on direct inter-institutional sharing of sensitive customer information, creating fragmented financial data silos that hinder collaborative fraud intelligence and centralized AML model training~\cite{thommandru2023}. Existing graph-based AML approaches have demonstrated promising capability in learning hidden transactional dependencies and suspicious network structures~\cite{cheng2023, karim2024, li2025}. However, many of these approaches remain constrained by centralized training assumptions, limited temporal behavioral modeling, insufficient scalability considerations, and lack of integration with operational compliance workflows required for real-world deployment.
+
+To address these limitations, this paper proposes \projectname{}, a scalable and privacy-preserving federated graph-learning framework for intelligent TBML detection across distributed financial environments. The framework enables collaborative cross-bank fraud analysis, real-time compliance monitoring, and human-in-the-loop investigation while preserving institutional privacy and regulatory constraints. The proposed system models financial entities including accounts, transactions, trade documents, and compliance metadata as heterogeneous graph structures using Memgraph to capture latent transactional dependencies and suspicious laundering propagation patterns. A dual-stream neural architecture is employed, consisting of a multi-hop Graph Attention Network based on GATv2Conv for structural relationship learning and a Long Short-Term Memory (LSTM) temporal branch for modeling evolving transaction behavior and sequential laundering activity. Federated Learning using the FedAvg aggregation strategy enables collaborative training across distributed banking institutions without exposing raw personally identifiable financial information, thereby preserving regulatory compliance and institutional data privacy. In parallel, a Kafka-based streaming pipeline supports continuous transaction ingestion and low-latency fraud inference for real-time analytical monitoring.
+
+The primary contributions of this work are summarized as follows:
+
+\begin{itemize}
+    \item \textbf{Hybrid Structural-Temporal Architecture:} Development of a federated hybrid graph-learning architecture integrating GATv2Conv and LSTM networks for joint structural and temporal TBML analysis.
+    \item \textbf{Heterogeneous Financial Modeling:} Construction of a heterogeneous graph-based financial intelligence framework using Memgraph for multi-relational entity modeling and suspicious transaction propagation analysis.
+    \item \textbf{Privacy-Preserving Workflows:} Integration of distributed Federated Learning workflows to support privacy-preserving collaborative fraud detection across isolated banking environments using optimized aggregate weight distribution.
+    \item \textbf{Low-Latency Streaming Infrastructure:} Design of a scalable streaming and compliance-monitoring pipeline supporting continuous transaction ingestion via Apache Kafka, optimized 2-hop subgraph retrieval, and concurrent analytical operations.
+    \item \textbf{Two-Tiered HITL Verification:} Incorporation of human-in-the-loop compliance investigation workflows featuring local analyst triage interfaces and centralized global auditing protocols to minimize operational false positives.
+\end{itemize}\
+
+%========================================================
+\section{Related Work and Research Gap}
+%========================================================
+
+AML detection research has progressively evolved from conventional rule-based transaction monitoring and statistical anomaly detection toward graph-centric relational learning, temporal behavioral analysis, and privacy-aware distributed intelligence frameworks. The increasing scale of digital banking infrastructure, high-frequency financial transactions, and interconnected cross-border trade ecosystems has exposed significant limitations in traditional fraud detection systems, particularly in identifying hidden transactional dependencies and coordinated laundering behavior across distributed financial networks.
+Early AML detection systems predominantly relied on deterministic rule-based engines, statistical anomaly detection, and conventional machine learning models operating on flat tabular transaction data \cite{jensen2023}. These approaches provided baseline capabilities for identifying suspicious transactional irregularities using manually engineered features, threshold-based alert generation, and isolated transaction scoring mechanisms. Recent studies integrating Artificial Intelligence (AI) and supervised machine learning techniques demonstrated measurable improvements in automated risk assessment and suspicious activity classification \cite{raj2024}. However, such models fundamentally assume that transactions are independent observations, thereby failing to capture hidden relational dependencies, coordinated entity interactions, and multi-hop laundering propagation patterns distributed across financial ecosystems. In addition, traditional tabular learning approaches frequently suffer from severe class imbalance, elevated false-positive generation, limited interpretability, and reduced adaptability under large-scale transactional workloads. Most importantly, these systems remain structurally incapable of modeling the interconnected topological behavior commonly observed in sophisticated TBML operations.
+
+To address the structural limitations of flat transactional analysis, recent research has increasingly explored graph-based learning techniques for financial crime detection. Song \textit{et al.} introduced the ATC framework to incorporate neighboring transactional behavior into laundering detection through graph contextualization \cite{song2026}, while Cheng \textit{et al.} proposed GAGNN for identifying coordinated laundering communities using graph attention mechanisms and relational propagation analysis \cite{cheng2023}. Li \textit{et al.} further developed MG-HRL using heterogeneous graph representations to improve multi-view laundering detection across interconnected financial entities \cite{li2025}. Additional studies investigated scalable graph analytical techniques including Personalized PageRank propagation, EvolveGCN, adversarial graph learning, semi-supervised node classification, and graph anomaly detection for large-scale AML environments \cite{gezici2025, karim2024, balaji2025}. These approaches demonstrated strong capability in learning hidden topological structures, suspicious group interactions, and latent relational dependencies that remain undetectable using traditional machine learning pipelines. However, most existing graph-learning frameworks primarily treat financial transaction networks as static structural snapshots, limiting their ability to model evolving laundering behavior and high-velocity sequential transactional irregularities over time. Furthermore, several graph-based approaches rely heavily on centralized training assumptions and lack operational integration with scalable compliance infrastructures required for real-world deployment.
+
+Beyond structural graph analysis, temporal and sequential behavioral learning techniques have also been investigated to model evolving financial activity patterns and transaction lifecycle irregularities. Fan \textit{et al.} proposed the CRP-AML framework integrating CNN, RNN, and GNN architectures for anomaly detection within high-velocity transaction environments \cite{fan2026}. Similarly, Koo \textit{et al.} explored autoencoder-driven anomaly detection combined with temporal transaction analysis for suspicious activity monitoring and behavioral risk assessment \cite{koo2024}. These studies demonstrated that temporal behavioral modeling can significantly improve detection capability for evolving anomalies, sequential laundering activities, and dynamic transaction irregularities that static graph structures alone may fail to capture. In parallel, recent research has increasingly emphasized the importance of privacy-preserving collaborative intelligence due to growing regulatory constraints surrounding sensitive financial information and inter-institutional data sharing. Federated analytical paradigms have emerged as promising alternatives for distributed AML intelligence by enabling collaborative model training without centralizing raw customer data. Nevertheless, existing privacy-aware frameworks often lack integration with heterogeneous graph intelligence, temporal behavioral learning, low-latency transaction streaming, and operational human-in-the-loop compliance investigation workflows within a unified architecture.
+
+Despite substantial progress in AML research, several critical research gaps remain unresolved within existing TBML detection systems:
+
+\begin{itemize}
+
+\item \textbf{Limited Structural-Temporal Integration:} Existing frameworks predominantly focus on either graph-based relational learning or temporal behavioral modeling independently, with limited unified integration of both structural topology and evolving transaction dynamics.
+
+\item \textbf{Centralized Learning Assumptions:} Many AML architectures continue to assume centralized financial datasets, creating significant privacy, regulatory, and institutional data-sharing challenges in distributed banking environments.
+
+\item \textbf{Insufficient Real-Time Analytical Infrastructure:} Current approaches inadequately address continuous transaction streaming, low-latency fraud inference, and scalable operational deployment requirements necessary for real-time financial surveillance.
+
+\item \textbf{Lack of Human-in-the-Loop Compliance Workflows:} Several deep learning AML systems operate as fully automated black-box models without incorporating analyst-guided verification, explainability support, or operational compliance investigation mechanisms.
+
+\item \textbf{Limited Heterogeneous Financial Modeling:} Existing models frequently underutilize heterogeneous financial relationships involving accounts, trade records, compliance metadata, and transactional dependencies required for realistic TBML intelligence analysis.
+
+\end{itemize}
+
+Motivated by these limitations, the proposed FedGAT-TBML framework introduces a scalable and privacy-preserving federated graph-learning architecture integrating heterogeneous graph intelligence, temporal behavioral learning, distributed collaborative training, real-time streaming analytics, and human-in-the-loop compliance investigation for intelligent TBML detection across distributed financial systems.
+% ==========================================================
+\section{Proposed Methodology}
+% ==========================================================
+
+The proposed FedGAT-TBML framework is designed as a scalable and privacy-aware federated graph-learning architecture for intelligent Trade-Based Money Laundering (TBML) detection across distributed financial environments. The framework integrates heterogeneous financial graph modeling, temporal behavioral analysis, distributed collaborative learning, and real-time compliance intelligence within a unified analytical pipeline. Unlike conventional AML systems that operate on isolated transactional records, the proposed methodology continuously transforms streaming financial events into structured relational graph states for downstream structural and temporal fraud inference. The overall workflow of the proposed framework is illustrated in Fig.~\ref{fig:methodology}.
+
+\begin{figure}[H]
+    \centering
+    \setlength{\fboxsep}{2pt}
+    \setlength{\fboxrule}{0.5pt}
+    \fbox{
+        \includegraphics[width=0.93\columnwidth]{methodology.png}
+    }
+    \caption{Methodology workflow of the proposed federated graph-learning framework for TBML detection.}
+    \label{fig:methodology}
+\end{figure}
+
+% ==========================================================
+\subsection{Heterogeneous Financial Graph Formulation}
+% ==========================================================
+
+Incoming financial events including transactional metadata, SWIFT records, KYC information, trade invoices, and compliance attributes are transformed into a heterogeneous financial graph representation to preserve relational dependencies across distributed financial environments. The financial ecosystem is modeled as a graph consisting of interconnected nodes and edges, formally represented as
+
+\[
+G = (V,E),
+\]
+
+where \(G\) denotes the heterogeneous financial graph, \(V\) represents the set of nodes corresponding to financial entities, and \(E\) denotes the set of edges capturing transactional relationships between entities.
+
+The node set is represented as
+
+\[
+V = \{v_1, v_2, \dots, v_n\},
+\]
+
+where each node \(v_i \in V\) represents a financial entity within the transactional ecosystem. The node set contains heterogeneous entity categories including \texttt{Account}, \texttt{Transaction}, \texttt{TradeDocument}, and \texttt{Institution} objects associated with financial activities and compliance metadata.
+
+Similarly, the edge set is represented as
+
+\[
+E = \{e_1, e_2, \dots, e_m\},
+\]
+
+where each edge \(e_j \in E\) represents a directed interaction between financial entities. The edge relationships encode transactional connectivity and structural neighborhood relationships including \texttt{SENDS}, \texttt{RECEIVES}, and \texttt{HAS\_DOCUMENT} connections within the graph structure.
+
+The generated graph preserves intermediary laundering pathways, latent transactional dependencies, and multi-hop financial interactions that remain difficult to capture using isolated tabular transaction representations. Each node further contains contextual financial attributes including transaction statistics, temporal activity distributions, KYC metadata, trade inconsistencies, and compliance-oriented analytical features required for downstream fraud inference.
+
+% ==========================================================
+\subsection{Continuous Stream Processing and 2-Hop Subgraph Extraction}
+% ==========================================================
+
+To support continuous financial surveillance under high-throughput transactional environments, incoming financial events are processed through a distributed streaming pipeline prior to graph projection and neural inference. Raw transactional streams are first validated, normalized, and transformed into structured event representations before dynamic insertion into the heterogeneous financial graph.
+
+For each incoming transaction node \(v\), the framework performs localized ego-graph extraction to capture neighboring financial interactions and intermediary transactional dependencies. The extracted neighborhood graph is formally represented as
+
+\[
+\mathcal{N}^{2}(v)=
+\{u \in V \mid d(u,v)\leq 2\},
+\]
+
+where \(\mathcal{N}^{2}(v)\) denotes the extracted 2-hop neighborhood centered around node \(v\), \(u\) represents neighboring entities connected to \(v\), and \(d(u,v)\) corresponds to the shortest-path distance between nodes \(u\) and \(v\).
+
+The framework restricts neighborhood extraction to a 2-hop radius to prevent exponential neighborhood expansion commonly observed in scale-free financial transaction networks. Unrestricted graph traversal introduces significant computational overhead and graph retrieval latency under continuous streaming conditions. By constraining the ego-graph extraction boundary, the framework maintains scalable graph retrieval performance and prevents downstream graph-processing bottlenecks during high-volume transaction ingestion.
+
+The extracted graph structures are subsequently transformed into node-feature matrices and edge-index tensor representations compatible with downstream graph-learning operations.
+
+% ==========================================================
+\subsection{Dual-Stream Neural Inference and Multi-Modal Fusion}
+% ==========================================================
+
+The proposed hybrid learning framework jointly models structural transactional dependencies and evolving behavioral patterns using a dual-stream neural inference architecture consisting of a graph-learning branch and a temporal behavioral branch.
+
+The structural learning component utilizes stacked \texttt{GATv2Conv} layers to perform iterative neighborhood aggregation and attention-driven message propagation across interconnected financial entities. Given a node embedding \(\mathbf{h}_i^{(l)}\) at graph layer \(l\), the propagation process is formulated as
+
+\begin{equation}
+\mathbf{h}_i^{(l+1)} =
+\sigma
+\left(
+\sum_{j \in \mathcal{N}(i)}
+\alpha_{ij}
+\mathbf{W}\mathbf{h}_j^{(l)}
+\right),
+\label{eq:gat}
+\end{equation}
+
+where \(\mathbf{h}_i^{(l)}\) denotes the embedding representation of node \(i\), \(\mathcal{N}(i)\) represents the neighboring entities connected to node \(i\), \(\alpha_{ij}\) denotes the learned attention coefficient between neighboring nodes, \(\mathbf{W}\) represents the learnable transformation matrix, and \(\sigma\) corresponds to the nonlinear activation function.
+
+The attention coefficient computed using the GATv2 attention mechanism is represented as
+
+\begin{equation}
+\alpha_{ij} =
+\frac{
+\exp
+\left(
+\mathbf{a}^{\top}
+\text{LeakyReLU}
+\left(
+\mathbf{W}
+[
+\mathbf{h}_i^{(l)}
+\parallel
+\mathbf{h}_j^{(l)}
+]
+\right)
+\right)
+}
+{
+\sum_{k \in \mathcal{N}(i)}
+\exp
+\left(
+\mathbf{a}^{\top}
+\text{LeakyReLU}
+\left(
+\mathbf{W}
+[
+\mathbf{h}_i^{(l)}
+\parallel
+\mathbf{h}_k^{(l)}
+]
+\right)
+\right)
+},
+\label{eq:gat_attention}
+\end{equation}
+
+where \(\mathbf{a}\) denotes the learnable attention vector and \(\parallel\) represents the vector concatenation operation.
+
+Through successive neighborhood aggregation, the graph-learning branch captures intermediary laundering pathways, coordinated entity interactions, and suspicious relational transaction behavior distributed across the financial ecosystem.
+
+Following graph propagation, node embeddings are aggregated using global mean pooling to generate contextual graph-level representations summarizing localized transactional topology surrounding the target transaction.
+
+In parallel, the temporal branch models evolving transaction behavior using Long Short-Term Memory (LSTM) networks. Given an input transaction sequence \(\mathbf{x}_t\), the temporal hidden representation is computed as
+
+\begin{equation}
+\mathbf{h}_t =
+\text{LSTM}
+(
+\mathbf{x}_t,
+\mathbf{h}_{t-1}
+),
+\label{eq:lstm}
+\end{equation}
+
+where \(\mathbf{x}_t\) denotes the transaction feature vector at time step \(t\), \(\mathbf{h}_t\) represents the current temporal hidden state, and \(\mathbf{h}_{t-1}\) corresponds to the previous sequence representation.
+
+The temporal branch enables the framework to identify evolving laundering behavior including repeated transfers, dormant account activation, abnormal transaction bursts, and irregular sequential financial activity patterns commonly associated with TBML operations.
+
+In addition to graph and temporal representations, trade-oriented metadata including invoice deviations, pricing inconsistencies, shipment irregularities, and document-level anomalies are processed through a dedicated trade feature learning branch consisting of a multilayer perceptron (MLP) with dense transformations, LayerNorm regularization, ReLU activation, and dropout operations for robust trade-feature embedding generation ($\mathbf{t}_f$).
+
+Rather than executing a flat, parallel three-channel fusion at the terminal layer, the architecture utilizes an intermediate sequential injection pipeline to embed spatial context natively within the sequential modeling loop. The topological graph context embedding $\mathbf{h}_g$ derived from the global pooling layer is broadcasted and concatenated directly with each input transaction step feature vector $\mathbf{x}_t$ within a lookback sequence horizon of length $T$. This constructs a unified structural-temporal sequence tensor $\tilde{\mathbf{x}}_t = [\mathbf{x}_t \parallel \mathbf{h}_g]$, which is processed through the recurrent LSTM stream to track chronological anomalies alongside neighborhood environments. 
+
+Let $\mathbf{h}_T$ denote the final hidden state vector extracted from the terminal step ($t=T$) of the recurrent execution loop. The structural-temporal representation and the independent trade feature vector are subsequently integrated using a two-channel late-fusion concatenation mechanism represented as:
+\begin{equation}
+\mathbf{z} = [\mathbf{h}_T \parallel \mathbf{t}_f],
+\label{eq:fusion}
+\end{equation}
+where $\mathbf{z}$ denotes the final unified multimodal feature embedding passed to the dense classification layers for downstream transaction risk categorization.
+
+The fused embedding representation is forwarded through dense classification layers for downstream fraud prediction and transaction risk analysis. The final probabilistic transaction risk distribution is computed using the Softmax activation function:
+
+\begin{equation}
+P(y_i)=
+\frac{e^{y_i}}
+{\sum_{j=1}^{C} e^{y_j}},
+\label{eq:softmax}
+\end{equation}
+
+where \(P(y_i)\) denotes the predicted probability corresponding to transaction class \(i\), \(y_i\) represents the output logit associated with class \(i\), and \(C\) denotes the total number of output transaction categories.
+
+% ==========================================================
+\subsection{Federated Collaborative Optimization}
+% ==========================================================
+
+To preserve institutional privacy and address regulatory restrictions associated with centralized financial data sharing, the proposed framework incorporates Federated Learning for distributed collaborative optimization across participating financial institutions. Each institution independently performs local model training using private transactional datasets while sharing only model parameters with the aggregation server.
+
+The framework utilizes the Federated Averaging (FedAvg) optimization strategy for global model aggregation, formally represented as
+
+\begin{equation}
+w_{t+1} =
+\sum_{k=1}^{K}
+\frac{n_k}{n}
+w_{t+1}^{k},
+\label{eq:fedavg}
+\end{equation}
+
+where \(w_{t+1}^{k}\) denotes the locally updated model parameters generated by institution \(k\), \(n_k\) represents the number of training samples associated with institution \(k\), \(n\) corresponds to the total number of distributed training samples across all participating institutions, and \(K\) denotes the total number of federated banking clients.
+
+The aggregated global model is redistributed across participating institutions for subsequent local optimization rounds, enabling collaborative fraud intelligence learning without exposing raw customer data or personally identifiable financial information. This distributed optimization strategy preserves institutional privacy, regulatory compliance, and cross-bank analytical collaboration within distributed financial ecosystems.
+
+% ==========================================================
+\subsection{Relational Audit Logging and Human-in-the-Loop Governance}
+% ==========================================================
+
+The generated probabilistic fraud predictions are continuously transformed into operational compliance states represented as
+
+\[
+\{
+P_{\texttt{CLEAN}},
+P_{\texttt{WATCHLIST}},
+P_{\texttt{FRAUD}}
+\},
+\]
+
+corresponding to low-risk, medium-risk, and high-risk transaction categories respectively.
+
+Inference outputs, transactional metadata, graph embeddings, compliance actions, and analytical audit trails are persistently stored within relational audit logging infrastructure to support downstream regulatory investigation, forensic traceability, and compliance monitoring workflows.
+
+To minimize operational false positives and improve investigative reliability, the framework incorporates a Human-in-the-Loop (HITL) governance pipeline operating through asymmetric role-based compliance workflows. Local bank-level analysts perform transactional triage and validate suspicious predictions generated by the hybrid learning framework prior to Suspicious Transaction Report (STR) generation. In parallel, centralized administrative investigators perform cross-institutional compliance auditing, documentation verification, regulatory escalation, and account-level investigative review for high-risk financial activities.
+
+The layered governance mechanism improves operational explainability, strengthens compliance oversight, and supports scalable real-world financial crime surveillance across distributed banking systems.
+
+
+% ==========================================================
+\section{Implementation Details}
+% ==========================================================
+
+The implementation architecture of the proposed \projectname{} framework is designed as a distributed and privacy-preserving pipeline for real-time Trade-Based Money Laundering (TBML) detection. The system integrates real-time transaction streaming, heterogeneous graph processing, hybrid deep learning, federated collaborative learning, and automated fraud inference within a unified monitoring framework. Financial transactions and trade records are continuously ingested through a Kafka-based streaming infrastructure and projected into a heterogeneous financial graph using Memgraph to capture interconnected transactional relationships.
+
+\begin{figure}[H]
+    \centering
+    \setlength{\fboxsep}{2pt}
+    \setlength{\fboxrule}{0.5pt}
+    \fbox{
+        \includegraphics[width=0.93\columnwidth]{architecture2.jpg}
+    }
+    \caption{Implementation workflow of the proposed \projectname{} framework for real-time TBML detection and federated fraud analysis.}
+    \label{fig:implementation_architecture}
+\end{figure}
+
+Localized multi-hop transactional subgraphs are subsequently processed using a hybrid learning architecture consisting of a multi-hop GATv2-based HGNN branch and an LSTM-based temporal analysis branch for structural and behavioral fraud analysis. To support collaborative intelligence sharing across distributed financial institutions, the framework incorporates a Federated Learning pipeline based on the FedAvg aggregation strategy without exposing sensitive transactional data. The generated fraud probabilities and transaction risk scores are utilized for automated alert generation, Suspicious Transaction Report (STR) creation, and real-time compliance monitoring workflows. The overall implementation workflow of the proposed system is illustrated in Fig.~\ref{fig:implementation_architecture}.
+
+% ==========================================================
+\subsection{Graph Database Design and Relationship Modeling}
+% ==========================================================
+
+To capture hidden transactional dependencies and multi-relational financial interactions, the proposed system models the financial ecosystem as a heterogeneous transaction graph using Memgraph. As illustrated in Fig.~\ref{fig:graph_schema}, the graph consists of node entities including \texttt{(:Account)}, \texttt{(:Transaction)}, and \texttt{(:Document)}, connected through transactional relationships represented using \texttt{[:SENDS]}, \texttt{[:TO]}, and \texttt{[:HAS\_DOC]} edges. The \texttt{(:Account)} node stores account-level attributes such as jurisdiction details, shell-account indicators, and dormancy information for behavioral analysis, while the \texttt{(:Transaction)} node captures transaction-specific metadata including amount, timestamp, and inferred risk scores. Similarly, the \texttt{(:Document)} node maintains trade-related information including SWIFT references, AIS tracking status, and trade deviation indicators for identifying suspicious trade activities.
+
+\begin{figure}[t]
+\centering
+
+\begin{tikzpicture}[
+    node distance=3cm,
+    every node/.style={font=\scriptsize},
+    entity/.style={
+        draw=black,
+        thick,
+        rounded corners=8pt,
+        align=center,
+        minimum width=3cm,
+        minimum height=2.2cm
+    },
+    relation/.style={
+        -{Latex[length=2.5mm]},
+        thick
+    }
+]
+
+% ==========================================================
+% ACCOUNT NODE
+% ==========================================================
+
+\node[
+    entity,
+    fill=orange!25
+] (account)
+{
+\textbf{(:Account)}\\
+\rule{2.2cm}{0.3pt}\\
+account\_id\\
+jurisdiction\\
+is\_shell\\
+dorm\_days
+};
+
+% ==========================================================
+% TRANSACTION NODE
+% ==========================================================
+
+\node[
+    entity,
+    fill=red!20,
+    right=of account
+] (transaction)
+{
+\textbf{(:Transaction)}\\
+\rule{2.2cm}{0.3pt}\\
+txn\_id\\
+amount\\
+timestamp\\
+risk\_score
+};
+
+% ==========================================================
+% DOCUMENT NODE
+% ==========================================================
+
+\node[
+    entity,
+    fill=yellow!30,
+    above=of transaction
+] (document)
+{
+\textbf{(:Document)}\\
+\rule{2.2cm}{0.3pt}\\
+swift\_ref\\
+price\_deviation\\
+weight\_gap
+};
+
+% ==========================================================
+% RELATIONSHIPS
+% ==========================================================
+
+\draw[relation]
+(account) to[bend left=18]
+node[midway, above] {\texttt{[:SENDS]}}
+(transaction);
+
+\draw[relation]
+(transaction) to[bend left=18]
+node[midway, below] {\texttt{[:TO]}}
+(account);
+
+\draw[relation]
+(transaction) --
+node[midway, right] {\texttt{[:HAS\_DOC]}}
+(document);
+
+\end{tikzpicture}
+
+\caption{Heterogeneous graph schema representing entity attributes and transactional relationships in the proposed TBML detection framework.}
+
+\label{fig:graph_schema}
+
+\end{figure}
+
+Incoming financial transactions streamed through Kafka are dynamically projected into Memgraph using Cypher-based graph construction queries, enabling real-time graph updates and relationship tracking. For each incoming transaction, the system extracts localized three-hop transactional subgraphs centered around the target entity to capture intermediary financial interactions and hidden transactional dependencies. The extracted graph structures are subsequently converted into node feature tensors and edge-index representations compatible with PyTorch Geometric for downstream HGNN processing.
+
+
+% ==========================================================
+\subsection{Hybrid Graph-Learning Network Implementation}
+% ==========================================================
+
+The proposed Trade-Based Money Laundering (TBML) detection architecture was implemented using a hybrid deep-learning pipeline integrating graph-based structural reasoning, temporal behavioral analysis, and trade-oriented document intelligence within a unified multi-modal fraud inference framework. The complete analytical pipeline was developed using PyTorch 2.x and the PyTorch Geometric framework for graph-learning operations.
+
+As illustrated in Fig.~\ref{fig:hybrid_model}, the deployed architecture integrates structural neighborhood propagation, temporal sequence modeling, and trade-feature fusion through interconnected analytical branches operating on dynamically extracted transactional subgraphs.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{aimodel.png}
+\caption{Hybrid multi-modal graph-learning architecture integrating GATv2-based structural neighborhood propagation, temporal LSTM behavioral modeling, and trade-feature fusion for intelligent TBML detection.}
+\label{fig:hybrid_model}
+\end{figure}
+
+The graph-learning branch utilizes three stacked \texttt{GATv2Conv} layers to perform iterative neighborhood aggregation and attention-driven message propagation across localized transactional ego-subgraphs. The deployed graph network uses dual-head attention with 32-dimensional hidden feature representations across all propagation stages. Unlike conventional graph convolution operators that rely on static isotropic aggregation, the deployed \texttt{GATv2Conv} implementation dynamically learns neighborhood importance weights through trainable attention propagation during transactional inference.
+
+The graph branch processes normalized KYC-oriented node embeddings with an input feature dimensionality of 3. Each account node embedding consists of three normalized behavioral risk attributes represented as:
+\begin{equation}
+\mathbf{x}_{\text{kyc}} = [x_{\text{shell}}, x_{\text{dormancy}}, x_{\text{entropy}}],
+\label{eq:kyc_features_impl}
+\end{equation}
+where $x_{\text{shell}}$ denotes a shell-company risk indicator, $x_{\text{dormancy}}$ represents normalized dormant-account inactivity duration, and $x_{\text{entropy}}$ corresponds to device-level transactional entropy used for structural behavioral irregularity analysis. These node-level analytical attributes are extracted during graph projection and normalized before entering the graph-learning pipeline.
+
+For each inference cycle, the graph-processing engine dynamically extracts a localized 2-hop transactional ego-subgraph centered around the target transaction node and converts the graph structure into PyTorch Geometric compatible tensor representations consisting of node-feature matrices and edge-index adjacency tensors. The deployed graph pipeline intentionally excludes edge attributes during message propagation to force the network toward topological neighborhood reasoning rather than direct transactional attribute memorization.
+
+The first graph propagation layer transforms the initial 3-dimensional KYC feature space into a 32-dimensional hidden embedding representation. To preserve stable feature geometry across propagation stages, the second and third graph-attention layers maintain identical 32-dimensional hidden representations while applying mean aggregation across attention heads instead of feature concatenation. Each graph propagation stage applies ReLU activation and dropout regularization with a dropout probability of \textbf{0.2} to improve embedding stability and reduce overfitting during distributed collaborative optimization.
+
+The deployed implementation additionally incorporates conditional edge-handling logic to stabilize graph propagation for sparse transactional neighborhoods containing zero-edge graph states. During such conditions, the framework bypasses deeper graph propagation and directly routes the node embeddings through a single graph-attention transformation stage to prevent invalid tensor propagation across disconnected graph structures.
+
+Following neighborhood propagation, node embeddings are aggregated using the \texttt{global\_mean\_pool()} operator to generate graph-level contextual representations summarizing localized transactional topology surrounding the target financial transaction. The pooling operation produces a fixed 32-dimensional graph-context embedding independent of the extracted ego-graph size.
+
+Rather than operating as a completely independent parallel branch, the pooled graph-context representation is expanded across the temporal axis and concatenated directly with sequential transaction features before temporal modeling. This generates a unified sequential tensor stream with an effective input dimensionality of 33, combining the 32-dimensional graph embedding with a 1-dimensional SWIFT transaction amount representation.
+
+The temporal behavioral branch utilizes an LSTM architecture with 32-dimensional hidden sequential representations for modeling evolving financial activity patterns. The recurrent sequence-learning pipeline identifies behavioral laundering signatures including repeated transfers, dormant account reactivation, abnormal settlement bursts, and high-frequency transactional layering commonly associated with TBML operations.
+
+Concurrently, trade-oriented document metadata is processed independently through a dedicated multilayer perceptron (MLP) consisting of dense linear transformations, LayerNorm regularization, ReLU activation, and dropout stabilization layers. The trade branch processes a 2-dimensional input representation consisting of normalized invoice pricing deviation and shipment weight-gap irregularity metrics represented as:
+\begin{equation}
+\mathbf{x}_{\text{trade}} = [x_{\text{price}}, x_{\text{weight}}],
+\label{eq:trade_features_impl}
+\end{equation}
+The trade-feature branch transforms the input trade representation into a dense 32-dimensional analytical embedding used for downstream multi-modal fraud inference.
+
+The final classification stage performs late-fusion integration between the structural-temporal sequence representation generated by the LSTM branch and the trade-feature embedding generated by the trade MLP. The terminal hidden state extracted from the LSTM sequence pipeline is concatenated with the trade embedding to generate a unified 64-dimensional fraud-analysis representation vector $\mathbf{z}$.
+
+The fused representation $\mathbf{z}$ is subsequently forwarded through fully connected dense classification layers reinforced with LayerNorm stabilization and dropout regularization to generate probabilistic transaction risk predictions across three operational compliance categories including \texttt{CLEAN}, \texttt{WATCHLIST}, and \texttt{FRAUD}.
+
+The distributed training pipeline utilizes the Adam optimizer with weighted cross-entropy loss functions to address severe class imbalance commonly observed in TBML datasets. Gradient clipping, randomized mini-batch shuffling, weighted sampling strategies, and dropout regularization were additionally incorporated to improve convergence stability and reduce localized client-side training variance during federated collaborative optimization.
+% ==========================================================
+\subsection{Federated Learning Architecture}
+% ==========================================================
+
+As illustrated in Fig.~\ref{fig:federated_architecture}, the federated learning infrastructure was implemented using the Flower distributed training framework with synchronized full-client participation across three isolated banking environments. A centralized aggregation server initializes and broadcasts the global hybrid HGNN-LSTM parameter state to all participating clients prior to each communication cycle, where every client independently performs local optimization on institution-specific heterogeneous transaction graphs without exposing raw financial records outside institutional boundaries.
+
+\begin{figure}[H]
+\centering
+\resizebox{0.95\columnwidth}{!}{
+\begin{tikzpicture}[
+    node distance=1.4cm and 1.6cm,
+    >=stealth,
+    thick,
+    every node/.style={font=\scriptsize},
+    block/.style={
+        draw,
+        rectangle,
+        rounded corners=3pt,
+        align=center,
+        minimum width=2.3cm,
+        minimum height=0.9cm
+    },
+    server/.style={
+        draw,
+        rectangle,
+        rounded corners=4pt,
+        thick,
+        fill=red!15,
+        align=center,
+        minimum width=3.2cm,
+        minimum height=1.1cm
+    }
+]
+
+% ==========================================================
+% SERVER
+% ==========================================================
+\node[server] (server) {Central Aggregation\\Server (FedAvg)};
+
+% ==========================================================
+% CLIENTS
+% ==========================================================
+\node[block, fill=blue!12, below=2.8cm of server] (client2) {Bank Client 2\\Local Training};
+\node[block, fill=blue!12, left=1.2cm of client2] (client1) {Bank Client 1\\Local Training};
+\node[block, fill=blue!12, right=1.2cm of client2] (client3) {Bank Client 3\\Local Training};
+
+% ==========================================================
+% LOCAL DATA
+% ==========================================================
+\node[block, fill=green!12, below=0.8cm of client1] (data1) {Private Transaction\\Graph Data};
+\node[block, fill=green!12, below=0.8cm of client2] (data2) {Private Transaction\\Graph Data};
+\node[block, fill=green!12, below=0.8cm of client3] (data3) {Private Transaction\\Graph Data};
+
+% ==========================================================
+% CONNECTIONS
+% ==========================================================
+
+% Client 1
+\draw[->, color=blue!70!black] (client1.north)
+to[bend left=15]
+node[left, font=\tiny, pos=0.6] {Local Updates}
+(server.west);
+
+\draw[<-, color=red!70!black] (client1.30)
+to[bend right=15]
+node[right, font=\tiny, pos=0.4, xshift=-0.2cm] {Global Model}
+(server.210);
+
+% Client 2
+\draw[->, color=blue!70!black] (client2.110)
+to[bend left=10]
+node[left, font=\tiny] {Updates}
+(server.250);
+
+\draw[<-, color=red!70!black] (client2.70)
+to[bend right=10]
+node[right, font=\tiny] {Model}
+(server.290);
+
+% Client 3
+\draw[->, color=blue!70!black] (client3.north)
+to[bend right=15]
+node[right, font=\tiny, pos=0.6] {Local Updates}
+(server.east);
+
+\draw[<-, color=red!70!black] (client3.150)
+to[bend left=15]
+node[left, font=\tiny, pos=0.4, xshift=0.2cm] {Global Model}
+(server.330);
+
+% Data connections
+\draw[->] (data1) -- (client1);
+\draw[->] (data2) -- (client2);
+\draw[->] (data3) -- (client3);
+
+\end{tikzpicture}
+}
+\caption{Federated learning architecture for privacy-preserving collaborative TBML detection across distributed financial institutions.}
+\label{fig:federated_architecture}
+\end{figure}
+
+The deployed federated pipeline utilizes full-client participation with \texttt{fraction\_fit = 1.0}, \texttt{min\_fit\_clients = 3}, and \texttt{min\_available\_clients = 3} to ensure synchronized distributed optimization across all participating banking institutions during each communication round. Local client-side optimization utilizes the Adam optimizer with weighted cross-entropy loss, gradient clipping with a maximum norm threshold of \(1.0\), randomized mini-batch shuffling, and dropout-regularized backpropagation to stabilize distributed convergence under severe transactional class imbalance. Following local optimization, serialized neural weight tensors are transmitted to the centralized aggregation server, where FedAvg-based weighted parameter aggregation is executed across all participating clients over ten synchronized communication rounds. The globally optimized model parameters generated during the final aggregation cycle are persistently serialized into reusable NumPy parameter archives for downstream real-time TBML inference and distributed compliance-monitoring deployment.
+
+% ==========================================================
+\subsection{Real-Time Fraud Inference and Compliance Workflow}
+% ==========================================================
+
+As illustrated in Fig.~\ref{fig:realtime_workflow_final}, the deployed inference pipeline operates as an asynchronous event-driven fraud orchestration workflow integrating Kafka-based transaction streaming, dynamic Memgraph synchronization, hybrid HGNN-LSTM inference, automated STR generation, and role-based compliance escalation. Incoming SWIFT transaction events are continuously consumed through Kafka ingestion topics and projected into dynamically evolving transactional graph states prior to downstream fraud inference.
+
+\begin{figure}[H]
+\centering
+\resizebox{0.98\columnwidth}{!}{
+\begin{tikzpicture}[
+    node distance=1.1cm and 1.1cm,
+    >=stealth,
+    thick,
+    every node/.style={font=\scriptsize},
+    block/.style={
+        draw,
+        rectangle,
+        rounded corners=3pt,
+        align=center,
+        minimum width=2.4cm,
+        minimum height=0.9cm
+    },
+    storage/.style={
+        draw,
+        cylinder,
+        shape border rotate=90,
+        aspect=0.3,
+        align=center,
+        minimum height=1cm,
+        minimum width=1.2cm
+    }
+]
+
+\node[block, fill=blue!12] (txn) {Incoming\\Transactions};
+\node[block, fill=orange!15, right=of txn] (kafka) {Kafka Streaming\\\& Graph Update};
+\node[block, fill=green!15, right=of kafka] (model) {HGNN-LSTM\\Inference Model};
+\node[block, fill=yellow!18, right=of model] (risk) {\texttt{CLEAN}\\ \texttt{WATCHLIST}\\ \texttt{FRAUD}};
+
+\node[block, fill=cyan!15, below=1.8cm of model] (bank) {BankUser\\Dashboard};
+\node[block, fill=red!15, left=of bank] (str) {STR Generation\\(GROQ LLaMA-70B)};
+\node[block, fill=purple!15, right=of bank] (notify) {Email / Push\\Notification};
+
+\node[block, fill=pink!18, below=1.8cm of notify] (admin) {Admin\\Dashboard};
+\node[block, fill=orange!18, left=of admin] (action) {Freeze Account /\\Request Documents};
+
+\node[storage, fill=gray!15] (db) at ($(action.west)-(2.2,0)$) {PostgreSQL};
+
+\draw[->] (txn) -- (kafka);
+\draw[->] (kafka) -- (model);
+\draw[->] (model) -- (risk);
+
+\draw[->] (risk.south) -- ++(0,-0.5) -| (bank.north);
+
+\draw[->] (bank) -- (str);
+\draw[->] (str.north) -- ++(0,0.4) -| (notify.north);
+\draw[->] (notify) -- (admin);
+\draw[->] (admin) -- (action);
+
+\draw[->, dashed] (action.west) -- (db.east);
+\draw[->, dashed] (str.south) |- (db.north);
+\draw[<->, dashed] (bank.south) -- ++(0,-0.6) -| (db.north);
+\draw[<->, dashed] (admin.south) |- ++(0,-0.5) -| (db.south);
+
+\end{tikzpicture}
+}
+\caption{Real-time fraud inference and compliance workflow of the proposed TBML detection framework.}
+\label{fig:realtime_workflow_final}
+\end{figure}
+
+The deployed inference model generates probabilistic transaction risk predictions across \texttt{CLEAN}, \texttt{WATCHLIST}, and \texttt{FRAUD} categories, which are subsequently persisted within PostgreSQL-based audit infrastructure for downstream compliance traceability. The operational compliance layer incorporates asymmetric role-based access control (RBAC) for Human-in-the-Loop (HITL) fraud governance, where \texttt{BankUser} analysts perform transactional triage and automated STR generation using the GROQ LLaMA-70B pipeline, while \texttt{Admin} investigators perform account restriction, document verification, and cross-institutional compliance escalation workflows. Automated notification delivery and compliance-event propagation are handled through the Resend email infrastructure for real-time investigative coordination.
+
+% ==========================================================
+\section{Experimental Results and Discussion}
+% ==========================================================
+
+The experimental evaluation was conducted across three distributed banking clients (BANKA, BANKB, and BANKC) to analyze the effectiveness of the proposed federated hybrid graph learning framework for intelligent Trade-Based Money Laundering (TBML) detection. The results validate that the HGNN-LSTM architecture successfully captures camouflaged transactional dependencies and multi-hop laundering typologies within highly imbalanced financial networks.
+
+
+% ==========================================================
+\subsection{Federated Model Performance Analysis}
+% ==========================================================
+
+Table~\ref{tab:comprehensive_results} summarizes the final multi-class detection performance across all participating federated banking clients after 10 global aggregation rounds. Unlike traditional models that struggle with class imbalance, the proposed framework successfully mapped the distinct topological signatures of all three transaction states.
+
+\begin{table}[!htbp]
+\centering
+\caption{Comprehensive Federated Client Performance Across All Transaction Classes (Round 10)}
+\label{tab:comprehensive_results}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|c|c|c|}
+\hline
+\textbf{Client Entity} & \textbf{Transaction Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} \\
+\hline
+\hline
+\multirow{3}{*}{BANKA} & Clean (0) & 1.00 & 1.00 & 1.00 \\
+\cline{2-5}
+ & Watchlist (1) & 0.79 & 0.97 & 0.87 \\
+\cline{2-5}
+ & Fraud (2) & 0.96 & 0.73 & 0.83 \\
+\hline
+\hline
+\multirow{3}{*}{BANKB} & Clean (0) & 1.00 & 1.00 & 1.00 \\
+\cline{2-5}
+ & Watchlist (1) & 0.79 & 0.99 & 0.88 \\
+\cline{2-5}
+ & Fraud (2) & 0.98 & 0.73 & 0.84 \\
+\hline
+\hline
+\multirow{3}{*}{BANKC} & Clean (0) & 1.00 & 1.00 & 1.00 \\
+\cline{2-5}
+ & Watchlist (1) & 0.79 & 0.99 & 0.88 \\
+\cline{2-5}
+ & Fraud (2) & 0.98 & 0.73 & 0.84 \\
+\hline
+\end{tabular}
+\end{table}
+
+As observed in Table~\ref{tab:comprehensive_results}, the model achieved a perfect Precision and Recall of $1.00$ on the \textit{Clean (0)} class across all isolated data silos. This flawless identification of normal corporate and retail transactions acts as a critical operational safeguard, ensuring zero False Positives for the vast majority of network traffic.
+
+For the minority classes, the model effectively balanced the detection threshold. It achieved exceptionally high Recall ($>0.97$) on \textit{Watchlist (1)} entities, flagging nearly all suspicious behavior for manual review. For active \textit{Fraud (2)} typologies, the model prioritized high Precision ($\ge 0.96$). While the Fraud Recall stabilized near $0.73$, this trade-off is deliberate and indicative of the model grappling with heavily camouflaged ``noise" injected into the synthetic data (e.g., cartel transactions masking behind normal commodity prices). Despite this camouflage, the model successfully identified hundreds of complex \textit{CYCLE} and \textit{FAN-IN} typologies without overfitting to a single bank's topological structure.
+
+% ==========================================================
+\subsection{Federated Learning Progression and Stability}
+% ==========================================================
+
+To demonstrate the efficacy of the \textit{FedAvg} aggregation strategy, model performance was tracked longitudinally across training epochs for each participating institution. 
+
+% --- BANK A PROGRESSION ---
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{banka_progression_accuracy.png}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{banka_progression_precision.png}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{banka_progression_recall.png}
+\end{minipage}
+\caption{BANKA: Longitudinal progression of Accuracy, Precision, and Recall across 10 federated rounds, demonstrating rapid initial learning and convergence.}
+\label{fig:progression_banka}
+\end{figure}
+
+% --- BANK B PROGRESSION ---
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankb_progression_accuracy.png}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankb_progression_precision.png}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankb_progression_recall.png}
+\end{minipage}
+\caption{BANKB: Progression metrics illustrating stabilization patterns identical to the primary node, confirming effective cross-institutional weight aggregation.}
+\label{fig:progression_bankb}
+\end{figure}
+
+% --- BANK C PROGRESSION ---
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankc_progression_accuracy.png}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankc_progression_precision.png}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankc_progression_recall.png}
+\end{minipage}
+\caption{BANKC: Progression metrics showcasing successful distributed learning and final convergence on an isolated data silo.}
+\label{fig:progression_bankc}
+\end{figure}
+
+As illustrated in Figures~\ref{fig:progression_banka}, \ref{fig:progression_bankb}, and \ref{fig:progression_bankc}, all three nodes exhibited near-identical learning trajectories. The models initially demonstrated instability during Round 1, aggressively misclassifying nodes due to localized data starvation. However, by Round 4, the integration of global weights allowed the local clients to generalize, resulting in a sharp upward stabilization. The models converged effectively by Round 10, achieving global Accuracies exceeding $96\%$ across all testing environments without requiring the centralization of any raw personally identifiable information (PII).
+
+% ==========================================================
+\subsection{Precision-Recall Validation and False Positive Minimization}
+% ==========================================================
+
+In AML datasets where illicit transactions represent less than $5\%$ of total volume, standard Receiver Operating Characteristic (ROC) curves can present an overly optimistic assessment of model performance. Consequently, the Precision-Recall Area Under the Curve (PR-AUC) alongside localized Confusion Matrices were utilized to comprehensively evaluate operational viability and cross-bank consistency.
+
+% --- BANK A VALIDATION ---
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}{0.48\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{banka_pr_curve_deep.png}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{banka_confusion_matrix_deep.png}
+\end{minipage}
+\caption{BANKA: Precision-Recall Curve (AP=0.92) and Confusion Matrix validating the minimization of False Positives on highly imbalanced local data.}
+\label{fig:valid_banka}
+\end{figure}
+
+% --- BANK B VALIDATION ---
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}{0.48\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankb_pr_curve_deep.png}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankb_confusion_matrix_deep.png}
+\end{minipage}
+\caption{BANKB: Precision-Recall Curve (AP=0.93) and Confusion Matrix, confirming global generalization across institutional boundaries.}
+\label{fig:valid_bankb}
+\end{figure}
+
+% --- BANK C VALIDATION ---
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}{0.48\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankc_pr_curve_deep.png}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{bankc_confusion_matrix_deep.png}
+\end{minipage}
+\caption{BANKC: Precision-Recall Curve (AP=0.93) and Confusion Matrix proving high-precision cartel detection in peripheral data nodes.}
+\label{fig:valid_bankc}
+\end{figure}
+
+Figures~\ref{fig:valid_banka}, \ref{fig:valid_bankb}, and \ref{fig:valid_bankc} demonstrate that the federated HGNN-LSTM framework maintained a minimum PR-AUC score of $0.92$ globally. The corresponding confusion matrices further validate the system's operational readiness. Out of thousands of legitimate transactions, the model generated statistically negligible False Positives across all three isolated network environments. This robust generalization validates that the global federated weights successfully captured the underlying topological signatures of TBML activity rather than merely memorizing local institutional noise.
+
+% ==========================================================
+\subsection{Computational Optimization: Subgraph Constriction}
+% ==========================================================
+
+A critical design consideration in real-time graph learning is the ``Six Degrees of Kevin Bacon" phenomenon—where unbounded traversal in scale-free financial networks leads to exponential node extraction and subsequent database timeouts.
+
+To maintain the sub-second Cypher query latency required for live Kafka streaming integration, the physical subgraph extraction was deliberately constricted to a 2-hop radius. However, the neural architecture employed a 3-layer Graph Attention Network (GATv2). This design allowed the nodes to perform higher-order message passing within the constrained local environment. This methodology successfully mitigated GNN over-smoothing and prevented global network noise from corrupting the embeddings, proving that deep feature extraction within a constrained physical radius yields optimal detection of localized smurfing operations without compromising real-time system performance.
+
+% ==========================================================
+\section{Conclusion and Future Work}
+% ==========================================================
+
+\subsection{Conclusion}
+
+This paper presented \projectname{}, a scalable and privacy-aware federated graph-learning framework for intelligent Trade-Based Money Laundering (TBML) detection across distributed financial environments. Unlike conventional AML systems that rely on isolated, tabular transaction analysis and static rule-based monitoring, the proposed framework integrates spatial graph reasoning, temporal behavioral profiling, and trade-oriented document intelligence within a unified analytical pipeline. By utilizing an intermediate sequential injection design, localized graph topologies are pooled and embedded natively inside the chronological transaction modeling loop, followed by terminal late-fusion classification. The deployment of dynamically updating heterogeneous financial graphs enables the framework to capture localized laundering pathways, coordinated counterparty interactions, and hidden financial dependencies that remain completely undetectable using traditional tabular learning structures.
+
+The mathematical integration of a 3-layer GATv2-based graph network with an LSTM temporal modeling block significantly improves the framework's ability to isolate evolving laundering velocity and sequential transaction irregularities within an optimized 2-hop physical query radius. In parallel, the deployment of a federated learning framework successfully addresses inter-institutional data-silo constraints and GDPR compliance mandates by enabling collaborative cross-bank model optimization without centralizing raw financial records or exposing customer personally identifiable information (PII). Experimental evaluations conducted across distributed banking silos validate that the framework maintains sub-second streaming inference cycles, minimizes operational false positives, and converges rapidly by global round 10 to deliver an operational precision exceeding 96\%.
+
+Furthermore, the deployed production architecture seamlessly bridges advanced deep-learning pipelines with operational compliance realities through Apache Kafka streaming, dynamic Memgraph synchronization, automated STR compilation via GROQ LLaMA-70B, and asymmetric Role-Based Human-in-the-Loop (HITL) compliance governance. The proposed framework therefore establishes a highly robust, scalable, and privacy-preserving architectural foundation for real-time financial crime surveillance within modern distributed banking ecosystems.
+
+\subsection{Future Work}
+
+While the current framework establishes a rigorous foundation for privacy-preserving collaborative fraud intelligence, several opportunities remain for future engineering enhancement:
+
+\begin{itemize}
+
+\item \textbf{Document-Aware Financial Intelligence:}
+Future extensions will focus on integrating transformer-based NLP architectures or specialized large language models to extract semantic feature representations from unstructured trade documentation payloads, including international bills of lading, letters of credit, and shipping declarations. The resulting document-level text embeddings will be fused directly into the multi-modal learning core to strengthen trade anomaly analysis.
+
+\item \textbf{Continuous-Time Dynamic Graph Learning:}
+The current implementation evaluates stateful, localized subgraphs captured at discrete transaction intervals. Future work will investigate Continuous-Time Dynamic Graph (CTDG) architectures capable of continuously processing temporal edge activations, transaction velocities, and shifting topological state transitions to further optimize the tracking of high-velocity smurfing and structuring typologies.
+
+\item \textbf{Secure Federated Aggregation:}
+To provide absolute mathematical immunity against potential gradient-leakage, membership inference, or model-inversion attacks on the shared network weights, future iterations will explore the integration of advanced cryptographic configurations, including Fully Homomorphic Encryption (FHE) and Secure Multi-Party Computation (SMPC), during the central parameter aggregation sequence.
+
+\item \textbf{Adaptive Explainable Compliance Intelligence:}
+Future research will explore explainable graph neural network (XGNN) mechanisms, such as edge-importance subgraph visualizers, to provide local analysts with transparent, topological justifications for generated alerts. This will be paired with adaptive risk-calibration strategies to further reduce operational false-alarm baselines and optimize human-in-the-loop compliance triage loops.
+
+\end{itemize}
+
+% ==========================================================
+% REFERENCES
+% ==========================================================
+
+\bibliographystyle{IEEEtran}
+\nocite{*}
+ \bibliography{references}
+
+\end{document}

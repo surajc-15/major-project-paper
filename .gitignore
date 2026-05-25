@@ -1,0 +1,45 @@
+# LaTeX intermediate files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.fmt
+*.fot
+*.lof
+*.log
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.nav
+*.snm
+*.vrb
+*.xdv
+
+# Build directories
+/build/
+/out/
+
+# Latexmk
+latexmkrc
+
+# PDF output (optional)
+# Uncomment if you don't want PDFs in git
+# *.pdf
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Editors
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
