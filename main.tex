@@ -534,14 +534,6 @@ node[midway, right] {\texttt{[:HAS\_DOC]}}
 
 Incoming financial transactions streamed through Kafka are dynamically projected into Memgraph using Cypher-based graph construction queries, enabling real-time graph updates and relationship tracking. For each incoming transaction, the system extracts localized three-hop transactional subgraphs centered around the target entity to capture intermediary financial interactions and hidden transactional dependencies. The extracted graph structures are subsequently converted into node feature tensors and edge-index representations compatible with PyTorch Geometric for downstream HGNN processing.
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=\columnwidth]{memgraphlab.png}
-\caption{   Graph visualization showing interconnected account and transaction entities with multi-hop transactional relationships.}
-\label{fig:memgraph_visualization}
-\end{figure}
-
-As illustrated in Fig.~\ref{fig:memgraph_visualization}, the proposed framework dynamically projects financial entities into a heterogeneous graph structure within Memgraph for real-time transactional relationship analysis. The visualization demonstrates interconnected account and transaction nodes used for localized multi-hop ego-graph extraction during downstream HGNN-based TBML inference.
 
 % ==========================================================
 \subsection{\textbf{Hybrid Graph-Learning Network Implementation}}
@@ -554,7 +546,7 @@ As illustrated in Fig.~\ref{fig:hybrid_model}, the deployed architecture integra
 \begin{figure}[H]
 \centering
 \includegraphics[width=\columnwidth]{aimodel.png}
-\caption{Hybrid multi-modal graph-learning architecture .}
+\caption{Hybrid multi-modal graph-learning architecture integrating GATv2-based structural neighborhood propagation, temporal LSTM behavioral modeling, and trade-feature fusion for intelligent TBML detection.}
 \label{fig:hybrid_model}
 \end{figure}
 
